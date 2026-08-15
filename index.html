@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FridgeIQ</title>
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="pilot-banner">⚠️ אפליקציית פיילוט | 🔒 הפרטיות שלך אצלך: המידע נשמר מקומית על המכשיר בלבד!</div>
+
+  <div class="hero-shell">
+    <div class="mesh"><div class="orb o1"></div><div class="orb o2"></div></div>
+    <nav>
+      <div class="logo">Fridge<em>IQ</em></div>
+      <div class="nav-actions">
+        <button class="nav-btn" onclick="goBack()">↩️ חזרה</button>
+        <button class="nav-btn" onclick="openExitModal()">✕ יציאה</button>
+      </div>
+    </nav>
+    <div class="hero">
+      <h1>בואו נרכיב את <span class="gr">הארוחה הבאה שלכם</span></h1>
+      <p class="hero-sub">צלמו את המקרר והמזווה, קבלו מתכונים חכמים וחסכו כסף ומזון.</p>
+    </div>
+  </div>
+
+  <div class="app-sec">
+    <div class="main">
+
+      <div class="steps-bar" id="stepsBar">
+        <div class="step-dot active" data-step="1"><span>1</span>מקרר</div>
+        <div class="step-dot" data-step="2"><span>2</span>מזווה</div>
+        <div class="step-dot" data-step="3"><span>3</span>חוסרים</div>
+        <div class="step-dot" data-step="4"><span>4</span>תוצאות</div>
+      </div>
+
+      <!-- Step 1: Fridge photo -->
+      <section class="panel active" id="panel-1">
+        <h2>שלב 1 · צלמו את המקרר</h2>
+        <p class="hint">תמונה ברורה של המדפים תעזור לנו לזהות מה יש לכם.</p>
+        <label class="upload-box" for="fridgeInput">
+          <img id="fridgePreview" class="preview-img hidden" alt="תצוגת המקרר">
+          <span id="fridgeUploadText">📷 הוסיפו תמונת מקרר</span>
+          <input type="file" id="fridgeInput" accept="image/*" capture="environment" hidden onchange="handleImageUpload(event, 'fridge')">
+        </label>
+        <div class="panel-actions">
+          <button class="btn btn-primary" id="toStep2" disabled onclick="goToStep(2)">המשך →</button>
+        </div>
+      </section>
+
+      <!-- Step 2: Pantry photo -->
+      <section class="panel" id="panel-2">
+        <h2>שלב 2 · צלמו את המזווה</h2>
+        <p class="hint">ארון היבשים, קופסאות שימורים, תבלינים ועוד.</p>
+        <label class="upload-box" for="pantryInput">
+          <img id="pantryPreview" class="preview-img hidden" alt="תצוגת המזווה">
+          <span id="pantryUploadText">📷 הוסיפו תמונת מזווה</span>
+          <input type="file" id="pantryInput" accept="image/*" capture="environment" hidden onchange="handleImageUpload(event, 'pantry')">
+        </label>
+        <div class="panel-actions">
+          <button class="btn btn-ghost" onclick="goToStep(1)">← חזרה</button>
+          <button class="btn btn-primary" id="toStep3" disabled onclick="goToStep(3)">המשך →</button>
+        </div>
+      </section>
+
+      <!-- Step 3: Missing items -->
+      <section class="panel" id="panel-3">
+        <h2>שלב 3 · מה חסר לכם?</h2>
+        <p class="hint">רשמו מוצרים שאין לכם בבית (מופרדים בפסיק) — ה-AI ידע להימנע מהם בהמלצות.</p>
+        <textarea id="missingItemsInput" class="missing-input" placeholder="לדוגמה: ביצים, גבינה צהובה, בצל..."></textarea>
+        <div class="panel-actions">
+          <button class="btn btn-ghost" onclick="goToStep(2)">← חזרה</button>
+          <button class="btn btn-primary" onclick="runAnalysis()">✨ מצאו לי מתכונים</button>
+        </div>
+      </section>
+
+      <!-- Loading -->
+      <section class="panel" id="panel-loading">
+        <div class="loader"></div>
+        <p class="hint">ה-AI סורק את התמונות שלכם ובונה תפריט חכם...</p>
+      </section>
+
+      <!-- Results -->
+      <section class="panel" id="panel-4">
+        <h2>התוצאות שלכם</h2>
+
+        <div class="savings-box" id="savingsBox">
+          💰 חסכתם עד כה כ-₪0 בזכות ניצול נכון של המקרר
+        </div>
+
+        <div id="wasteAlerts"></div>
+
+        <h3 class="sub-title">🥕 מה זוהה אצלכם</h3>
+        <div class="chips" id="detectedItems"></div>
+
+        <h3 class="sub-title">🍽️ מתכונים מומלצים</h3>
+        <div class="recipe-grid" id="recipeGrid"></div>
+
+        <div class="panel-actions">
+          <button class="btn btn-ghost" onclick="goToStep(1)">🔄 סריקה חדשה</button>
+        </div>
+      </section>
+
+      <!-- Image history -->
+      <section class="history-sec">
+        <div class="history-head">
+          <h3 class="sub-title">🕒 היסטוריית סריקות (נשמר מקומית בלבד)</h3>
+          <button class="btn btn-link" onclick="clearHistory()">נקו היסטוריה</button>
+        </div>
+        <div class="history-row" id="historyRow"></div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- Exit modal -->
+  <div class="modal-overlay" id="exitModal">
+    <div class="modal-box">
+      <h3>לצאת מהאפליקציה?</h3>
+      <p>הנתונים שלכם שמורים מקומית על המכשיר בלבד ולא יימחקו, אבל תהליך שלא הושלם לא יישמר.</p>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeExitModal()">הישארו</button>
+        <button class="btn btn-danger" onclick="confirmExit()">צאו</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
