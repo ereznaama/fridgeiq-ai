@@ -10,11 +10,15 @@
 </head>
 <body>
   <? var apiKeyConfigured = hasApiKeyConfigured(); ?>
+  <? var nutritionSheetConfigured = hasNutritionSheetConfigured(); ?>
 
-  <div class="pilot-banner">⚠️ אפליקציית פיילוט | 🔒 הפרטיות שלך אצלך: התמונות נשלחות ל-Gemini לניתוח ולא נשמרות בשרת שלנו</div>
+  <div class="pilot-banner">⚠️ אפליקציית פיילוט | 🔒 הפרטיות שלך אצלך: התמונות נשלחות ל-Gemini לניתוח, ויומן התזונה נשמר בגיליון Google פרטי שלכם</div>
 
   <? if (!apiKeyConfigured) { ?>
   <div class="api-warning">⚠️ מפתח Gemini API עדיין לא הוגדר. פתחי את עורך ה-Apps Script → Project Settings → Script Properties, והוסיפי GEMINI_API_KEY. עד אז האפליקציה תציג שגיאה בניתוח.</div>
+  <? } ?>
+  <? if (!nutritionSheetConfigured) { ?>
+  <div class="api-warning">⚠️ יומן התזונה עדיין לא הוקם. פתחי את עורך ה-Apps Script, בחרי את הפונקציה setupNutritionSheet מהתפריט ולחצי Run (פעם אחת). עד אז המעקב היומי לא יעבוד.</div>
   <? } ?>
 
   <div class="hero-shell">
@@ -34,6 +38,37 @@
 
   <div class="app-sec">
     <div class="main">
+
+      <section class="dashboard-card">
+        <div class="dashboard-head">
+          <h3>היום שלי</h3>
+          <button class="btn btn-link" onclick="openGoalsModal()">🎯 יעדים</button>
+        </div>
+
+        <div class="macro-row">
+          <div class="macro">
+            <div class="macro-label">קלוריות</div>
+            <div class="macro-bar"><div class="macro-fill" id="calorieFill"></div></div>
+            <div class="macro-value" id="calorieValue">0 / 0</div>
+          </div>
+          <div class="macro">
+            <div class="macro-label">חלבון (גרם)</div>
+            <div class="macro-bar"><div class="macro-fill protein" id="proteinFill"></div></div>
+            <div class="macro-value" id="proteinValue">0 / 0</div>
+          </div>
+        </div>
+
+        <div class="quick-add">
+          <input type="text" id="manualDishName" placeholder="שם מנה">
+          <input type="number" id="manualCalories" placeholder="קלוריות" min="0">
+          <input type="number" id="manualProtein" placeholder="חלבון (ג')" min="0">
+          <button class="btn btn-ghost" onclick="addManualEntry()">➕ הוסיפו ליומן</button>
+        </div>
+
+        <div class="today-log" id="todayLogList"></div>
+
+        <button class="btn btn-link" onclick="exportMyData()">⬇️ ייצוא Excel אישי</button>
+      </section>
 
       <div class="steps-bar" id="stepsBar">
         <div class="step-dot active" data-step="1"><span>1</span>מקרר</div>
@@ -109,6 +144,13 @@
 
         <div class="panel-actions">
           <button class="btn btn-ghost" onclick="goToStep(1)">🔄 סריקה חדשה</button>
+          <button class="btn btn-primary" onclick="loadDayRecommendations()">🌙 המלצות להמשך היום</button>
+        </div>
+
+        <div id="dayRecommendationsSection" class="hidden">
+          <h3 class="sub-title">🌙 מה כדאי לאכול בהמשך היום</h3>
+          <p class="hint" id="dayRemainingHint"></p>
+          <div class="recipe-grid" id="dayRecommendationsGrid"></div>
         </div>
       </section>
 
@@ -130,6 +172,23 @@
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeExitModal()">הישארו</button>
         <button class="btn btn-danger" onclick="confirmExit()">צאו</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="goalsModal">
+    <div class="modal-box">
+      <h3>יעדים יומיים</h3>
+      <p>היעדים נשמרים לפי חשבון ה-Google שלכם, ומשמשים גם לחישוב ההמלצות להמשך היום.</p>
+      <div class="goals-form">
+        <label for="goalCalories">קלוריות ליום</label>
+        <input type="number" id="goalCalories" min="0" step="50">
+        <label for="goalProtein">חלבון ליום (גרם)</label>
+        <input type="number" id="goalProtein" min="0" step="5">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeGoalsModal()">ביטול</button>
+        <button class="btn btn-primary" onclick="saveGoals()">שמירה</button>
       </div>
     </div>
   </div>

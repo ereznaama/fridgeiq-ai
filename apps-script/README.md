@@ -1,51 +1,66 @@
 # FridgeIQ — גרסת Google Apps Script
 
-גרסה עצמאית של FridgeIQ שרצה כ-Web App דרך Google Apps Script, עם ניתוח תמונות אמיתי מול **Gemini API** (לא דמו). מפתח ה-API נשמר בצד השרת (Script Properties) ולעולם לא נחשף בדפדפן.
+גרסה עצמאית ומלאה של FridgeIQ שרצה כ-Web App דרך Google Apps Script:
+
+- סריקת מקרר/מזווה וקבלת מתכונים — ניתוח תמונות אמיתי מול **Gemini API** (לא דמו).
+- **מעקב תזונה יומי**: קלוריות וחלבון, יעדים אישיים, והמלצות AI למה כדאי לאכול בהמשך היום לפי מה שנשאר בתקציב.
+- **יומן פרטי לכל משתמש**, מקושר לחשבון ה-Google שלו — נשמר בגיליון Google (Sheet) משותף, וניתן לייצוא בכל רגע כקובץ **Excel (.xlsx)** אמיתי להורדה.
+
+מפתח ה-Gemini נשמר בצד השרת (Script Properties) ולעולם לא נחשף בדפדפן.
 
 ## קבצים
 
 | קובץ | תפקיד |
 |---|---|
-| `Code.gs` | שרת: מגיש את העמוד וקורא ל-Gemini API |
+| `Code.gs` | שרת: מגיש את העמוד, קורא ל-Gemini API, וקורא/כותב ליומן התזונה (Google Sheet) |
 | `index.html` | מבנה העמוד |
 | `Stylesheet.html` | העיצוב (CSS) |
 | `JavaScript.html` | הלוגיקה בצד הלקוח |
-| `appsscript.json` | מניפסט הפרויקט (הרשאות ה-Web App) |
+| `appsscript.json` | מניפסט הפרויקט (הרשאות ה-Web App וה-Scopes) |
+
+## איך הזיהוי עובד (שונה מהגרסה הקודמת)
+
+כדי שכל משתמש יראה **את היומן שלו בלבד**, האפליקציה צריכה לדעת מי מחובר — ולכן, בניגוד לגרסה הראשונית, הפעם צריך **להתחבר עם חשבון Google** כדי להיכנס (זו הייתה הבחירה שלך כשדיברנו על זיהוי משתמשים). זה מוגדר כבר ב-`appsscript.json`:
+
+```json
+"webapp": { "access": "ANYONE", "executeAs": "USER_ACCESSING" }
+```
+
+המשמעות המעשית: SpreadsheetApp (הכתיבה ליומן) רצה **בהרשאות של כל מי שצופה באפליקציה**, לא שלך — ולכן גיליון היומן חייב להיות משותף (Share) עם כל מי שישתמש באפליקציה, אחרת הכתיבה תיכשל. זה מוסבר בצעד 3 למטה.
 
 ## הקמה — צעד אחר צעד
 
-1. היכנסי ל-**script.google.com** → **New project**.
-2. שני את שם הפרויקט (למעלה, "Untitled project") ל-`FridgeIQ`.
-3. ב-`Code.gs` הדיפולטיבי — מחקי את התוכן והדביקי את התוכן מהקובץ `Code.gs` כאן.
-4. הוסיפי 3 קבצי HTML חדשים (**File → New → HTML file**), כל אחד בשם בדיוק כמו למטה (בלי הסיומת `.html`, עורך ה-Script מוסיף אותה אוטומטית):
-   - `index` → הדביקי את תוכן `index.html`
-   - `Stylesheet` → הדביקי את תוכן `Stylesheet.html`
-   - `JavaScript` → הדביקי את תוכן `JavaScript.html`
-5. ב-**Project Settings** (גלגל השיניים בתפריט הצד) — סמני **"Show appsscript.json manifest file in editor"**. קובץ `appsscript.json` ייפתח בעורך; החליפי את תוכנו בתוכן `appsscript.json` כאן.
+1. היכנסי ל-**script.google.com** → **New project**, ושני את השם ל-`FridgeIQ`.
+2. העתיקי את 4 קבצי הקוד (כמו בגרסה הקודמת): `Code.gs`, `index` / `Stylesheet` / `JavaScript` (קבצי HTML חדשים), ו-`appsscript.json` (דרך Project Settings → "Show appsscript.json manifest file in editor").
+3. **הקמת יומן התזונה (חד-פעמי):**
+   - בעורך ה-Apps Script, מרשימת הפונקציות שלמעלה (ליד כפתור ה-Run) בחרי את `setupNutritionSheet`.
+   - לחצי **Run**. בפעם הראשונה תתבקשי לאשר הרשאות (Sheets, Drive) — אשרי.
+   - פתחי את **Execution log** (או View → Logs) וראי את הקישור לגיליון החדש שנוצר: "FridgeIQ Nutrition Log".
+   - פתחי את הקישור הזה, ולחצי **Share** → תני הרשאת **Editor** לכל מי שישתמש באפליקציה (או "Anyone with the link → Editor", אם זה שימוש משפחתי פרטי בלבד).
 
 ## הגדרת מפתח ה-Gemini API (בצד השרת, לא בקוד)
 
-1. קבלי מפתח API מ-**aistudio.google.com/apikey** (עם החשבון שכבר יש לך שם).
-2. בעורך ה-Apps Script: **Project Settings** (גלגל השיניים) → גללי למטה ל-**Script Properties** → **Add script property**.
-3. Property: `GEMINI_API_KEY`
-   Value: המפתח שקיבלת מ-AI Studio.
+1. קבלי מפתח API מ-**aistudio.google.com/apikey**.
+2. **Project Settings** (גלגל השיניים) → **Script Properties** → **Add script property**.
+3. Property: `GEMINI_API_KEY`, Value: המפתח שקיבלת.
 4. שמרי.
-
-ככה המפתח לא נכנס לקוד ולא מגיע לדפדפן של המשתמשים — רק השרת של Apps Script מכיר אותו.
 
 ## פריסה (Deploy)
 
-1. **Deploy → New deployment**.
-2. לחצי על סמל הגלגל ליד "Select type" ובחרי **Web app**.
-3. **Execute as:** Me (את החשבון שלך — כדי שהריצה תהיה על המפתח שלך, לא על חשבון כל משתמש).
-4. **Who has access:** **Anyone** — כך שכל מי שיש לו את הקישור יוכל להיכנס בלי להתחבר לחשבון Google (כפי שביקשת).
-5. **Deploy**, ואשרי את ההרשאות שתתבקשי (Apps Script יבקש גישה ל-UrlFetch כדי לפנות ל-Gemini).
-6. תקבלי כתובת **Web app URL** — זה הקישור העצמאי לאפליקציה. אפשר לשתף אותו לכל מי שתרצי.
+1. **Deploy → New deployment** → סוג: **Web app**.
+2. **Execute as: User accessing the web app** (לא "Me" — זה ההבדל מהגרסה הקודמת, הכרחי כדי שכל משתמש ייכתב תחת הזהות שלו).
+3. **Who has access: Anyone** (ידרוש מכל משתמש להתחבר עם חשבון Google כדי להיכנס).
+4. **Deploy**, ואשרי הרשאות.
+5. תקבלי כתובת **Web app URL** — הקישור העצמאי לשיתוף.
 
-כדי לעדכן בעתיד: אחרי שינוי קוד, **Deploy → Manage deployments → ✏️ (עריכה) → Version: New version → Deploy**. אם תפרסמי **New deployment** במקום זה, תקבלי כתובת URL חדשה.
+בפעם הראשונה שכל משתמש (כולל את) נכנס לקישור, Google יציג מסך אישור הרשאות (ואולי אזהרת "אפליקציה לא מאומתת" — תקינה לגמרי לפרויקט אישי; לוחצים Advanced → Go to FridgeIQ). זה קורה פעם אחת למשתמש.
+
+כדי לעדכן קוד בעתיד: **Deploy → Manage deployments → ✏️ → Version: New version → Deploy** (שומר על אותו קישור).
 
 ## חשוב לדעת
 
-- **עלות/מכסה:** כל קריאה ל-Gemini (כל סריקה של משתמש) נספרת מול חשבון ה-AI Studio **שלך**, כי `Execute as: Me`. אם הקישור יהיה פתוח לכולם, כדאי לעקוב מדי פעם אחרי השימוש ב-aistudio.google.com.
-- **פרטיות:** התמונות שהמשתמש מעלה נשלחות ישירות מהשרת של Apps Script ל-Gemini לצורך הניתוח ולא נשמרות בשום מקום בצד השרת. היסטוריית הסריקות (תמונות ממוזערות + תוצאות) נשמרת רק בדפדפן של המשתמש עצמו (`localStorage`), לא בשרת.
-- **מודל:** כרגע מוגדר `gemini-2.0-flash` ב-`Code.gs` (שורה ראשונה, `GEMINI_MODEL`) — אפשר להחליף למודל אחר בכל שלב.
+- **שיתוף הגיליון:** זה הצעד הכי קריטי — אם משתמש מקבל שגיאת "שגיאה ברישום ליומן" / "MISSING_NUTRITION_SHEET", כנראה שהגיליון לא משותף אליו בהרשאת עריכה.
+- **יעדים:** יעד ברירת מחדל הוא 2000 קלוריות / 90 גרם חלבון עד שמשתמש קובע יעד אישי (כפתור "🎯 יעדים" בעמוד).
+- **ייצוא ל-Excel:** כפתור "⬇️ ייצוא Excel אישי" מייצר קובץ `.xlsx` אמיתי עם כל הרישומים של המשתמש בלבד, ומוריד אותו ישירות לדפדפן — לא נשאר קובץ זמני ב-Drive.
+- **עלות/מכסה Gemini:** המפתח הוא שלך (Script Property גלובלי), אז כל סריקה של כל משתמש נספרת מול חשבון ה-AI Studio שלך — כדאי לעקוב מדי פעם.
+- **מודל:** `gemini-2.0-flash`, מוגדר ב-`Code.gs` (קבוע `GEMINI_MODEL`) — ניתן להחליף.

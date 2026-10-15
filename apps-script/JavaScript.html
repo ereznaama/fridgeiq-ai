@@ -1,7 +1,7 @@
 <script>
 // FridgeIQ — client logic. Calls the Apps Script server (Code.gs) via
-// google.script.run, which in turn calls the Gemini API with the key
-// stored server-side in Script Properties.
+// google.script.run: Gemini analysis/recommendations, and the per-user
+// nutrition log (Google Sheet) keyed by the signed-in Google account.
 
 const HISTORY_KEY = 'fridgeiq_history';
 const MAX_HISTORY = 8;
@@ -10,8 +10,11 @@ const MAX_IMAGE_DIMENSION = 1024; // keep uploads small & fast for Gemini
 const state = {
   step: 1,
   images: { fridge: null, pantry: null },
-  missingItems: [],
+  missingItems: '',
 };
+
+let recipesCache = [];
+let recommendationsCache = [];
 
 // ---------- Navigation ----------
 
@@ -79,11 +82,12 @@ function resizeImageFile(file, maxDimension) {
   });
 }
 
-// ---------- Analysis (Gemini, via the Apps Script server) ----------
+// ---------- Fridge/pantry analysis (Gemini) ----------
 
 function runAnalysis() {
   state.missingItems = document.getElementById('missingItemsInput').value;
 
+  document.getElementById('loadingText').textContent = 'שולחים את התמונות ל-Gemini ובונים תפריט חכם...';
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.getElementById('panel-loading').classList.add('active');
 
@@ -91,6 +95,7 @@ function runAnalysis() {
     .withSuccessHandler(result => {
       renderResults(result);
       saveToHistory(result);
+      document.getElementById('dayRecommendationsSection').classList.add('hidden');
       goToStep(4);
     })
     .withFailureHandler(showAnalysisError)
@@ -103,17 +108,19 @@ function showAnalysisError(error) {
 
   if (message.indexOf('MISSING_API_KEY') !== -1) {
     errorBox.textContent = 'מפתח ה-Gemini API עדיין לא מוגדר. פתחי את עורך ה-Apps Script → Project Settings → Script Properties, והוסיפי מפתח בשם GEMINI_API_KEY (אפשר לקבל מפתח ב-aistudio.google.com/apikey).';
+  } else if (message.indexOf('MISSING_USER_EMAIL') !== -1) {
+    errorBox.textContent = 'לא הצלחנו לזהות את חשבון ה-Google שלכם. ודאו שאתם מחוברים לחשבון Google ונסו לרענן את העמוד.';
+  } else if (message.indexOf('MISSING_NUTRITION_SHEET') !== -1) {
+    errorBox.textContent = 'יומן התזונה עדיין לא הוקם. יש להריץ פעם אחת את הפונקציה setupNutritionSheet מעורך ה-Apps Script.';
   } else if (message.indexOf('GEMINI_ERROR') !== -1) {
     errorBox.textContent = 'שגיאה מול Gemini: ' + message.replace('GEMINI_ERROR: ', '');
   } else {
-    errorBox.textContent = 'שגיאה בניתוח התמונות: ' + message;
+    errorBox.textContent = 'שגיאה: ' + message;
   }
 
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.getElementById('panel-error').classList.add('active');
 }
-
-// ---------- Render results ----------
 
 function renderResults(result) {
   document.getElementById('savingsBox').textContent =
@@ -130,21 +137,165 @@ function renderResults(result) {
     .map(i => `<span class="chip ${i.expiringSoon ? 'expiring' : ''}">${escapeHtml(i.name)}</span>`)
     .join('');
 
-  const grid = document.getElementById('recipeGrid');
-  grid.innerHTML = result.recipes
-    .map(r => `
-      <div class="recipe-card">
-        <h4>${escapeHtml(r.title)}</h4>
-        <p>${escapeHtml(r.description)}</p>
-        <div class="recipe-tags">${r.tags.map(t => `<span>${escapeHtml(t)}</span>`).join('')}</div>
-      </div>`)
-    .join('');
+  recipesCache = result.recipes || [];
+  document.getElementById('recipeGrid').innerHTML = recipesCache.map((r, i) => recipeCardHtml(r, i, 'logRecipe')).join('');
+}
+
+function recipeCardHtml(r, index, logFnName) {
+  const macros = (r.estCalories || r.estProtein)
+    ? `<div class="recipe-macros">${r.estCalories ? `🔥 ${r.estCalories} קק"ל` : ''}${r.estProtein ? ` · 🥩 ${r.estProtein} ג' חלבון` : ''}</div>`
+    : '';
+  return `
+    <div class="recipe-card">
+      <h4>${escapeHtml(r.title)}</h4>
+      <p>${escapeHtml(r.description)}</p>
+      ${macros}
+      <div class="recipe-tags">${(r.tags || []).map(t => `<span>${escapeHtml(t)}</span>`).join('')}</div>
+      <div class="recipe-card-actions">
+        <button class="log-recipe-btn" onclick="${logFnName}(${index}, this)">➕ הוסיפו ליומן</button>
+      </div>
+    </div>`;
 }
 
 function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str == null ? '' : String(str);
   return div.innerHTML;
+}
+
+// ---------- Recommendations for the rest of the day ----------
+
+function loadDayRecommendations() {
+  const section = document.getElementById('dayRecommendationsSection');
+  const grid = document.getElementById('dayRecommendationsGrid');
+  section.classList.remove('hidden');
+  grid.innerHTML = '<p class="hint">בודקים כמה נשאר לכם היום ובונים המלצות...</p>';
+
+  google.script.run
+    .withSuccessHandler(result => {
+      recommendationsCache = result.recommendations || [];
+      document.getElementById('dayRemainingHint').textContent = result.remaining
+        ? `נשאר לכם היום כ-${result.remaining.calories} קק"ל ו-${result.remaining.protein} ג' חלבון.`
+        : '';
+      grid.innerHTML = recommendationsCache.length
+        ? recommendationsCache.map((r, i) => recipeCardHtml(r, i, 'logRecommendation')).join('')
+        : '<p class="hint">אין כרגע המלצות — אולי כבר הגעתם ליעד היומי 🎉</p>';
+    })
+    .withFailureHandler(error => {
+      grid.innerHTML = `<p class="hint">לא הצלחנו לטעון המלצות (${escapeHtml((error && error.message) || error)}).</p>`;
+    })
+    .getDayRecommendations(state.images.fridge, state.images.pantry, state.missingItems);
+}
+
+// ---------- Nutrition log ----------
+
+function refreshDashboard() {
+  google.script.run
+    .withSuccessHandler(renderDashboard)
+    .withFailureHandler(() => { /* setup warnings at the top of the page already cover this */ })
+    .getTodayLog();
+}
+
+function renderDashboard(log) {
+  const calorieFill = document.getElementById('calorieFill');
+  const proteinFill = document.getElementById('proteinFill');
+
+  const caloriePct = log.goals.calorieGoal ? Math.min(100, (log.totals.calories / log.goals.calorieGoal) * 100) : 0;
+  const proteinPct = log.goals.proteinGoal ? Math.min(100, (log.totals.protein / log.goals.proteinGoal) * 100) : 0;
+
+  calorieFill.style.width = caloriePct + '%';
+  proteinFill.style.width = proteinPct + '%';
+
+  document.getElementById('calorieValue').textContent = `${log.totals.calories} / ${log.goals.calorieGoal} קק"ל`;
+  document.getElementById('proteinValue').textContent = `${log.totals.protein} / ${log.goals.proteinGoal} ג'`;
+
+  document.getElementById('goalCalories').value = log.goals.calorieGoal;
+  document.getElementById('goalProtein').value = log.goals.proteinGoal;
+
+  const list = document.getElementById('todayLogList');
+  list.innerHTML = log.entries.length
+    ? log.entries.map(e => `
+        <div class="log-row">
+          <span class="log-name">${escapeHtml(e.dishName || 'רישום ידני')}</span>
+          <span class="log-meta">${e.time} · ${e.calories} קק"ל · ${e.protein} ג' חלבון</span>
+        </div>`).join('')
+    : '<div class="today-log-empty">עדיין לא נרשם כלום היום</div>';
+}
+
+function logRecipe(index, buttonEl) {
+  logEntry({ type: 'scan', dishName: recipesCache[index].title, calories: recipesCache[index].estCalories || 0, protein: recipesCache[index].estProtein || 0 }, buttonEl);
+}
+
+function logRecommendation(index, buttonEl) {
+  logEntry({ type: 'recommendation', dishName: recommendationsCache[index].title, calories: recommendationsCache[index].estCalories || 0, protein: recommendationsCache[index].estProtein || 0 }, buttonEl);
+}
+
+function addManualEntry() {
+  const dishName = document.getElementById('manualDishName').value.trim();
+  const calories = Number(document.getElementById('manualCalories').value) || 0;
+  const protein = Number(document.getElementById('manualProtein').value) || 0;
+
+  if (!dishName) return;
+
+  logEntry({ type: 'manual', dishName, calories, protein }, null, () => {
+    document.getElementById('manualDishName').value = '';
+    document.getElementById('manualCalories').value = '';
+    document.getElementById('manualProtein').value = '';
+  });
+}
+
+function logEntry(entry, buttonEl, onDone) {
+  if (buttonEl) { buttonEl.disabled = true; buttonEl.textContent = 'נוסף ✓'; }
+
+  google.script.run
+    .withSuccessHandler(log => {
+      renderDashboard(log);
+      if (onDone) onDone();
+    })
+    .withFailureHandler(error => {
+      if (buttonEl) { buttonEl.disabled = false; buttonEl.textContent = '➕ הוסיפו ליומן'; }
+      alert('שגיאה ברישום ליומן: ' + ((error && error.message) || error));
+    })
+    .logMeal(entry);
+}
+
+// ---------- Daily goals modal ----------
+
+function openGoalsModal() {
+  document.getElementById('goalsModal').classList.add('open');
+}
+
+function closeGoalsModal() {
+  document.getElementById('goalsModal').classList.remove('open');
+}
+
+function saveGoals() {
+  const calorieGoal = Number(document.getElementById('goalCalories').value) || 0;
+  const proteinGoal = Number(document.getElementById('goalProtein').value) || 0;
+
+  google.script.run
+    .withSuccessHandler(log => {
+      renderDashboard(log);
+      closeGoalsModal();
+    })
+    .withFailureHandler(error => alert('שגיאה בשמירת היעדים: ' + ((error && error.message) || error)))
+    .setUserGoals(calorieGoal, proteinGoal);
+}
+
+// ---------- Export to Excel ----------
+
+function exportMyData() {
+  google.script.run
+    .withSuccessHandler(({ base64, filename }) => {
+      const link = document.createElement('a');
+      link.href = 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,' + base64;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    })
+    .withFailureHandler(error => alert('שגיאה בייצוא: ' + ((error && error.message) || error)))
+    .exportMyLogAsXlsx();
 }
 
 // ---------- Scan history (stored in the browser only — never sent to the server) ----------
@@ -218,5 +369,6 @@ function confirmExit() {
 
 document.addEventListener('DOMContentLoaded', () => {
   renderHistory();
+  refreshDashboard();
 });
 </script>
